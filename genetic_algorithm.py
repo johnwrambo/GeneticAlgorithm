@@ -6,12 +6,12 @@ import pandas as pd
 import numpy as np
 from random import randint
 from random import choices
-
 from matplotlib import pyplot as plt
 
 matplotlib.use('TkAgg')  # Use TkAgg instead of InterAgg
-# initial conditions
 
+# initial conditions
+note = "without cache"
 population = 60
 number_of_generations = 1000
 weight_limit = 800  # Knapsack capacity
@@ -45,25 +45,31 @@ def populate(pop_size: int):
     return decorator
 
 
-def log_time_results(func):
+def log_time_results(pop, gen, weight, note):
     """Decorator that logs the execution time and run time of the function."""
-    def wrapper(*args, **kwargs):
-        current_date_and_time = datetime.now()
-        start = time.time()
-        results = func(*args, **kwargs)
-        end = time.time()
-        total_time = end - start
-        with open("log.txt", "a") as file:  # "w" mode creates or overwrites the file
-            file.write(
-                f"Ran code at {current_date_and_time} - Results: {results} - Total run time: {total_time}...\n")
-        print(f"Total run time: {total_time}")
-        return results
-    return wrapper
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            current_date_and_time = datetime.now()
+            start = time.time()
+            results = func(*args, **kwargs)
+            end = time.time()
+            total_time = end - start
+            with open("log.txt", "a") as file:  # "w" mode creates or overwrites the file
+                file.write(
+                    f"{current_date_and_time}-: {results} pop:{pop} gens:{gen} weight:{weight} - run time: {total_time:.2f}->{note}\n")
+            print(f"Total run time: {total_time}")
+            return results
+
+        return wrapper
+
+    return decorator
 
 
 @populate(population)
-def generate_population(length):
-    return choices([0, 1], k=length)
+def generate_population(input_dataframe):
+    genome_length = len(input_dataframe)
+    return choices([0, 1], k=genome_length)
 
 
 def evaluate_genome(dataframe_key, constraint, current_generation):
@@ -155,10 +161,6 @@ def fitness_function(dataframe):
         if wheel[n] < r2 <= probability_total[n]:
             r2_select = n
 
-    # print(f"r1: {r1_select} r2: {r2_select}")
-    # print(f"dataframe start: \n{dataframe}")
-    # filtered_df = dataframe.sort_values("value", ascending=False)
-    # print(f"filtered dataframe start: \n{filtered_df}")
     filtered_df = dataframe.iloc[[r1_select, r2_select]]
     # print(f"selected parents: \n{filtered_df}")
     filtered_df = filtered_df.sort_values("value", ascending=False).reset_index(drop=True)
@@ -176,14 +178,10 @@ def evolve(parents, population_size):
     return generation
 
 
-@log_time_results
-def genetic_algorithm(input_dataframe, population_size, generations, weight_limit):
-    genome_length = len(input_dataframe)
-    # print(genome_length)
-
-    first_generation = generate_population(genome_length)
+@log_time_results(population, number_of_generations, weight_limit, note)
+def genetic_algorithm(input_dataframe, population_size, generations, weight_limit, options: str = None):
+    first_generation = generate_population(input_dataframe)
     current_generation = first_generation
-    # print(current_generation)
     solution_vec = []
     for _ in range(generations):
         unfit_removed = check_fitness(knapsack_key, current_generation, weight_limit)
@@ -196,26 +194,18 @@ def genetic_algorithm(input_dataframe, population_size, generations, weight_limi
         current_generation = evolve(parents, population_size)
         for n, i in enumerate(current_generation):
             current_generation[n] = mutate(current_generation[n])
-
-    final_generation = check_fitness(knapsack_key, current_generation, weight_limit, filtered=True)
-    # print(final_generation)
-    # print("wow")
-    # solution_df = evaluate_genome(knapsack_key, weight_limit, solution_vec)
+    # final_generation = check_fitness(knapsack_key, current_generation, weight_limit, filtered=True)
     solution_df = check_fitness(knapsack_key, solution_vec, weight_limit, filtered=True)
-    # solution_df = solution_df.sort_values("value", ascending=False)
+    print(solution_df.sort_values("value", ascending=False))
     solution_vec = solution_df.value.tolist()
-    # solution_vec = solution_vec.values.tolist()
-    # solution_vec.sort(reverse=False)
-    x = range(0, len(solution_vec))
-    plt.plot(x, solution_vec)
-    # print(solution_df)
     max_solution = solution_df.loc[solution_df["value"].idxmax()]
     weight = max_solution.weight
     max_value = solution_df.value.values.max()
-    # print(max_solution)
-    # print(f"Max Value: {max_value}, weight: {weight}")
-    sol = [max_value.tolist(),weight.tolist()]
-    # print(type(max_value))
+    sol = [max_value.tolist(), weight.tolist()]
+    if options == "plot":
+        x_vec = range(0, len(solution_vec))
+        plt.plot(x_vec, solution_vec)
+        return sol, [x_vec, solution_vec]
     return sol
 
 
